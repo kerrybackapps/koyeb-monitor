@@ -44,8 +44,8 @@ def koyeb_headers():
     }
 
 
-def resolve_service_id(service_name, app_name):
-    """Resolve a service name + app name to a Koyeb service ID."""
+def resolve_app_id(app_name):
+    """Resolve an app name to a Koyeb app ID."""
     resp = requests.get(
         f"{KOYEB_API_BASE}/apps",
         headers=koyeb_headers(),
@@ -55,24 +55,13 @@ def resolve_service_id(service_name, app_name):
     apps = resp.json().get("apps", [])
     if not apps:
         return None, f"App '{app_name}' not found"
-    app_id = apps[0]["id"]
-
-    resp = requests.get(
-        f"{KOYEB_API_BASE}/services",
-        headers=koyeb_headers(),
-        params={"app_id": app_id, "name": service_name},
-    )
-    resp.raise_for_status()
-    services = resp.json().get("services", [])
-    if not services:
-        return None, f"Service '{service_name}' not found in app '{app_name}'"
-    return services[0]["id"], None
+    return apps[0]["id"], None
 
 
-def delete_service(service_id):
-    """Delete a Koyeb service by ID."""
+def delete_app(app_id):
+    """Delete a Koyeb app by ID."""
     resp = requests.delete(
-        f"{KOYEB_API_BASE}/services/{service_id}",
+        f"{KOYEB_API_BASE}/apps/{app_id}",
         headers=koyeb_headers(),
     )
     resp.raise_for_status()
@@ -113,30 +102,28 @@ def kill():
     if not data:
         return jsonify({"error": "JSON body required"}), 400
 
-    service_name = data.get("service_name")
     app_name = data.get("app_name")
 
-    if not service_name or not app_name:
-        return jsonify({"error": "service_name and app_name are required"}), 400
+    if not app_name:
+        return jsonify({"error": "app_name is required"}), 400
 
-    logger.info(f"Kill requested for service: {service_name} (app: {app_name})")
+    logger.info(f"Kill requested for app: {app_name}")
     log_message("received", "/kill", data)
 
     try:
-        service_id, err = resolve_service_id(service_name, app_name)
+        app_id, err = resolve_app_id(app_name)
         if err:
-            logger.error(f"Failed to resolve service: {err}")
+            logger.error(f"Failed to resolve app: {err}")
             response = {"error": err}
             log_message("sent", "/kill", response, status=404)
             return jsonify(response), 404
 
-        result = delete_service(service_id)
-        logger.info(f"Service '{service_name}' deleted successfully")
+        result = delete_app(app_id)
+        logger.info(f"App '{app_name}' deleted successfully")
         response = {
             "status": "killed",
-            "service_name": service_name,
             "app_name": app_name,
-            "service_id": service_id,
+            "app_id": app_id,
         }
         log_message("sent", "/kill", response, status=200)
         return jsonify(response), 200
