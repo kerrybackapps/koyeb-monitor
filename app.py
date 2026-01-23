@@ -46,7 +46,6 @@ def koyeb_headers():
 
 def resolve_service_id(service_name, app_name):
     """Resolve a service name + app name to a Koyeb service ID."""
-    # First resolve app name to app ID
     resp = requests.get(
         f"{KOYEB_API_BASE}/apps",
         headers=koyeb_headers(),
@@ -58,7 +57,6 @@ def resolve_service_id(service_name, app_name):
         return None, f"App '{app_name}' not found"
     app_id = apps[0]["id"]
 
-    # List services in the app and find by name
     resp = requests.get(
         f"{KOYEB_API_BASE}/services",
         headers=koyeb_headers(),
