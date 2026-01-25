@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 KOYEB_API_BASE = "https://app.koyeb.com/v1"
 
 message_log = []
+logs_storage = {}  # Dict to store logs by app_name
 
 
 def log_message(direction, endpoint, data, status=None):
@@ -139,6 +140,34 @@ def kill():
         return jsonify(response), 500
 
 
+@app.route("/submit-logs", methods=["POST"])
+def submit_logs():
+    """Receive and store logs from a running app before it terminates."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    app_name = data.get("app_name")
+    logs = data.get("logs")
+
+    if not app_name:
+        return jsonify({"error": "app_name is required"}), 400
+    if logs is None:
+        return jsonify({"error": "logs field is required"}), 400
+
+    logger.info(f"Logs received for app: {app_name} ({len(logs)} chars)")
+    log_message("received", "/submit-logs", {"app_name": app_name, "logs_length": len(logs)})
+
+    logs_storage[app_name] = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "logs": logs,
+    }
+
+    response = {"status": "stored", "app_name": app_name}
+    log_message("sent", "/submit-logs", response, status=200)
+    return jsonify(response), 200
+
+
 MESSAGES_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -190,6 +219,105 @@ def messages():
     """View all received and sent messages as an HTML page."""
     return render_template_string(
         MESSAGES_TEMPLATE, messages=message_log, count=len(message_log)
+    )
+
+
+LOGS_LIST_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Koyeb Monitor - Run Logs</title>
+    <style>
+        body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #eee; }
+        h1 { color: #4fc3f7; }
+        .count { color: #aaa; margin-top: 0.5em; }
+        ul { list-style: none; padding: 0; }
+        li { margin: 0.5em 0; padding: 0.5em; background: #16213e; border-radius: 4px; }
+        a { color: #81c784; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .timestamp { color: #aaa; font-size: 0.85em; margin-left: 1em; }
+        .no-logs { color: #e57373; }
+    </style>
+</head>
+<body>
+    <h1>Koyeb Monitor - Run Logs</h1>
+    <p class="count">{{ count }} app log(s) stored</p>
+    {% if logs %}
+    <ul>
+        {% for app_name, entry in logs.items() %}
+        <li>
+            <a href="/logs/{{ app_name }}">{{ app_name }}</a>
+            <span class="timestamp">{{ entry.timestamp }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="no-logs">No logs stored yet.</p>
+    {% endif %}
+</body>
+</html>
+"""
+
+LOGS_VIEW_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Logs - {{ app_name }}</title>
+    <style>
+        body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #eee; }
+        h1 { color: #4fc3f7; }
+        .meta { color: #aaa; margin-bottom: 1em; }
+        a { color: #81c784; }
+        pre {
+            background: #0f3460;
+            padding: 1em;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <h1>{{ app_name }}</h1>
+    <p class="meta">Captured: {{ timestamp }} | <a href="/logs">Back to list</a></p>
+    <pre>{{ logs }}</pre>
+</body>
+</html>
+"""
+
+
+@app.route("/logs", methods=["GET"])
+def logs_list():
+    """List all stored app logs."""
+    return render_template_string(
+        LOGS_LIST_TEMPLATE, logs=logs_storage, count=len(logs_storage)
+    )
+
+
+@app.route("/logs/<app_name>", methods=["GET"])
+def logs_view(app_name):
+    """View logs for a specific app."""
+    if app_name not in logs_storage:
+        return render_template_string(
+            """
+            <!DOCTYPE html>
+            <html>
+            <head><title>Not Found</title>
+            <style>body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #eee; }
+            a { color: #81c784; }</style></head>
+            <body><h1>Logs not found for: {{ app_name }}</h1>
+            <p><a href="/logs">Back to list</a></p></body>
+            </html>
+            """,
+            app_name=app_name,
+        ), 404
+    entry = logs_storage[app_name]
+    return render_template_string(
+        LOGS_VIEW_TEMPLATE,
+        app_name=app_name,
+        timestamp=entry["timestamp"],
+        logs=entry["logs"],
     )
 
 
