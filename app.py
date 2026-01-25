@@ -59,6 +59,52 @@ def resolve_app_id(app_name):
     return apps[0]["id"], None
 
 
+def get_service_id(app_id):
+    """Get the first service ID for an app."""
+    resp = requests.get(
+        f"{KOYEB_API_BASE}/services",
+        headers=koyeb_headers(),
+        params={"app_id": app_id},
+    )
+    resp.raise_for_status()
+    services = resp.json().get("services", [])
+    if not services:
+        return None
+    return services[0]["id"]
+
+
+def fetch_koyeb_logs(service_id, limit=5000):
+    """Fetch runtime logs from Koyeb's streaming logs API."""
+    try:
+        # Use the logs query endpoint
+        resp = requests.get(
+            f"{KOYEB_API_BASE}/streams/logs/query",
+            headers=koyeb_headers(),
+            params={
+                "service_id": service_id,
+                "type": "runtime",
+                "limit": limit,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+
+        logs_data = resp.json()
+        logs_list = logs_data.get("logs", [])
+
+        # Combine log messages into a single string
+        log_lines = []
+        for entry in logs_list:
+            msg = entry.get("msg", "")
+            if msg:
+                log_lines.append(msg)
+
+        return "\n".join(log_lines)
+    except Exception as e:
+        logger.error(f"Failed to fetch logs from Koyeb: {e}")
+        return f"[Error fetching logs: {e}]"
+
+
 def delete_app(app_id):
     """Delete a Koyeb app by ID."""
     resp = requests.delete(
@@ -119,12 +165,31 @@ def kill():
             log_message("sent", "/kill", response, status=404)
             return jsonify(response), 404
 
+        # Fetch and store logs BEFORE deleting the app
+        logs_fetched = False
+        if app_name not in logs_storage:
+            service_id = get_service_id(app_id)
+            if service_id:
+                logger.info(f"Fetching logs for service {service_id} before deletion")
+                logs = fetch_koyeb_logs(service_id)
+                if logs and not logs.startswith("[Error"):
+                    logs_storage[app_name] = {
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "logs": logs,
+                        "source": "koyeb_api",
+                    }
+                    logs_fetched = True
+                    logger.info(f"Stored {len(logs)} chars of logs for {app_name}")
+            else:
+                logger.warning(f"No service found for app {app_name}")
+
         result = delete_app(app_id)
         logger.info(f"App '{app_name}' deleted successfully")
         response = {
             "status": "killed",
             "app_name": app_name,
             "app_id": app_id,
+            "logs_fetched": logs_fetched,
         }
         log_message("sent", "/kill", response, status=200)
         return jsonify(response), 200
@@ -236,6 +301,7 @@ LOGS_LIST_TEMPLATE = """
         a { color: #81c784; text-decoration: none; }
         a:hover { text-decoration: underline; }
         .timestamp { color: #aaa; font-size: 0.85em; margin-left: 1em; }
+        .source { color: #ffb74d; font-size: 0.85em; margin-left: 0.5em; }
         .no-logs { color: #e57373; }
     </style>
 </head>
@@ -248,6 +314,7 @@ LOGS_LIST_TEMPLATE = """
         <li>
             <a href="/logs/{{ app_name }}">{{ app_name }}</a>
             <span class="timestamp">{{ entry.timestamp }}</span>
+            {% if entry.source == 'koyeb_api' %}<span class="source">[fetched]</span>{% endif %}
         </li>
         {% endfor %}
     </ul>
@@ -280,7 +347,7 @@ LOGS_VIEW_TEMPLATE = """
 </head>
 <body>
     <h1>{{ app_name }}</h1>
-    <p class="meta">Captured: {{ timestamp }} | <a href="/logs">Back to list</a></p>
+    <p class="meta">Captured: {{ timestamp }}{% if source %} | Source: {{ source }}{% endif %} | <a href="/logs">Back to list</a></p>
     <pre>{{ logs }}</pre>
 </body>
 </html>
@@ -318,6 +385,7 @@ def logs_view(app_name):
         app_name=app_name,
         timestamp=entry["timestamp"],
         logs=entry["logs"],
+        source=entry.get("source", "submitted"),
     )
 
 
