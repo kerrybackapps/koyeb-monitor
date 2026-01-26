@@ -205,6 +205,48 @@ def kill():
         return jsonify(response), 500
 
 
+@app.route("/init-logs", methods=["POST"])
+def init_logs():
+    """Initialize log entry when a service first starts.
+
+    Creates the log file immediately so the logs link is active right away,
+    before waiting for the first periodic /submit-logs update.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    app_name = data.get("app_name")
+    if not app_name:
+        return jsonify({"error": "app_name is required"}), 400
+
+    model = data.get("model", "unknown")
+    start = data.get("start", "?")
+    end = data.get("end", "?")
+    instance_type = data.get("instance_type", "unknown")
+    started_at = data.get("started_at", datetime.now(timezone.utc).isoformat())
+
+    logger.info(f"Init logs for app: {app_name} (model={model}, {start}-{end}, {instance_type})")
+    log_message("received", "/init-logs", data)
+
+    init_text = (
+        f"Service starting: {model} indices {start}-{int(end)-1} on {instance_type}\n"
+        f"App: {app_name}\n"
+        f"Started at: {started_at}\n"
+        f"\nWaiting for logs...\n"
+    )
+
+    logs_storage[app_name] = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "logs": init_text,
+        "source": "init",
+    }
+
+    response = {"status": "initialized", "app_name": app_name}
+    log_message("sent", "/init-logs", response, status=200)
+    return jsonify(response), 200
+
+
 @app.route("/submit-logs", methods=["POST"])
 def submit_logs():
     """Receive and store logs from a running app before it terminates."""
