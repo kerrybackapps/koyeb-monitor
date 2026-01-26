@@ -154,55 +154,17 @@ def kill():
     if not app_name:
         return jsonify({"error": "app_name is required"}), 400
 
-    logger.info(f"Kill requested for app: {app_name}")
+    # Kill is disabled — just log the request without deleting the app
+    logger.info(f"Kill requested (DISABLED) for app: {app_name}")
     log_message("received", "/kill", data)
 
-    try:
-        app_id, err = resolve_app_id(app_name)
-        if err:
-            logger.error(f"Failed to resolve app: {err}")
-            response = {"error": err}
-            log_message("sent", "/kill", response, status=404)
-            return jsonify(response), 404
-
-        # Fetch and store logs BEFORE deleting the app
-        logs_fetched = False
-        if app_name not in logs_storage:
-            service_id = get_service_id(app_id)
-            if service_id:
-                logger.info(f"Fetching logs for service {service_id} before deletion")
-                logs = fetch_koyeb_logs(service_id)
-                if logs and not logs.startswith("[Error"):
-                    logs_storage[app_name] = {
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "logs": logs,
-                        "source": "koyeb_api",
-                    }
-                    logs_fetched = True
-                    logger.info(f"Stored {len(logs)} chars of logs for {app_name}")
-            else:
-                logger.warning(f"No service found for app {app_name}")
-
-        result = delete_app(app_id)
-        logger.info(f"App '{app_name}' deleted successfully")
-        response = {
-            "status": "killed",
-            "app_name": app_name,
-            "app_id": app_id,
-            "logs_fetched": logs_fetched,
-        }
-        log_message("sent", "/kill", response, status=200)
-        return jsonify(response), 200
-    except requests.exceptions.HTTPError as e:
-        logger.error(f"Koyeb API error: {e.response.text}")
-        response = {"error": f"Koyeb API error: {e.response.status_code}"}
-        log_message("sent", "/kill", response, status=502)
-        return jsonify(response), 502
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        response = {"error": str(e)}
-        log_message("sent", "/kill", response, status=500)
-        return jsonify(response), 500
+    response = {
+        "status": "kill_disabled",
+        "app_name": app_name,
+        "message": "Kill is currently disabled. Delete the app manually.",
+    }
+    log_message("sent", "/kill", response, status=200)
+    return jsonify(response), 200
 
 
 @app.route("/init-logs", methods=["POST"])
