@@ -389,13 +389,14 @@ LOGS_VIEW_TEMPLATE = """
 </head>
 <body>
     <h1>{{ app_name }}</h1>
-    <p class="meta">Captured: {{ timestamp }}{% if source %} | Source: {{ source }}{% endif %} | <a href="/logs">Back to list</a></p>
+    <p class="meta">Captured: {{ timestamp }}{% if source %} | Source: {{ source }}{% endif %} | <a href="/">Back to list</a></p>
     <pre>{{ logs }}</pre>
 </body>
 </html>
 """
 
 
+@app.route("/", methods=["GET"])
 @app.route("/logs", methods=["GET"])
 def logs_list():
     """List all stored app logs."""
@@ -416,7 +417,7 @@ def logs_view(app_name):
             <style>body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #eee; }
             a { color: #81c784; }</style></head>
             <body><h1>Logs not found for: {{ app_name }}</h1>
-            <p><a href="/logs">Back to list</a></p></body>
+            <p><a href="/">Back to list</a></p></body>
             </html>
             """,
             app_name=app_name,
