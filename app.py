@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 
 import requests
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, Response
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -352,7 +352,7 @@ LOGS_VIEW_TEMPLATE = """
 <body>
     <h1>{{ app_name }}</h1>
     <p class="meta">Captured: {{ timestamp }}{% if source %} | Source: {{ source }}{% endif %} | <a href="/">Back to list</a></p>
-    <pre>{{ logs }}</pre>
+    <pre>{{ logs|e }}</pre>
 </body>
 </html>
 """
@@ -392,6 +392,15 @@ def logs_view(app_name):
         logs=entry["logs"],
         source=entry.get("source", "submitted"),
     )
+
+
+@app.route("/logs-raw/<app_name>", methods=["GET"])
+def logs_raw(app_name):
+    """Return raw logs as plain text (no HTML rendering)."""
+    if app_name not in logs_storage:
+        return f"No logs found for: {app_name}\n", 404, {"Content-Type": "text/plain"}
+    entry = logs_storage[app_name]
+    return Response(entry["logs"], mimetype="text/plain")
 
 
 if __name__ == "__main__":
