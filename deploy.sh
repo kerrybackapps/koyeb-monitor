@@ -64,7 +64,7 @@ if [ -z "$KOYEB_API_TOKEN" ]; then
 fi
 
 APP_NAME="koyeb-monitor"
-GIT_REPO="kerryback/koyeb-monitor"
+GIT_REPO="kerrybackapps/koyeb-monitor"
 GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "main")
 
 echo "=========================================="
