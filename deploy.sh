@@ -88,7 +88,7 @@ fi
 echo "Checking if app '$APP_NAME' exists..."
 if koyeb apps get "$APP_NAME" --token "$KOYEB_API_TOKEN" &> /dev/null; then
     echo "App exists. Deleting old app first..."
-    koyeb apps delete "$APP_NAME" --token "$KOYEB_API_TOKEN" -y
+    echo "yes" | koyeb apps delete "$APP_NAME" --token "$KOYEB_API_TOKEN"
     echo "Waiting for deletion..."
     sleep 5
 fi
