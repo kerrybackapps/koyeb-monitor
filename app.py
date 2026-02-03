@@ -154,17 +154,33 @@ def kill():
     if not app_name:
         return jsonify({"error": "app_name is required"}), 400
 
-    # Kill is disabled — just log the request without deleting the app
-    logger.info(f"Kill requested (DISABLED) for app: {app_name}")
+    logger.info(f"Kill requested for app: {app_name}")
     log_message("received", "/kill", data)
 
-    response = {
-        "status": "kill_disabled",
-        "app_name": app_name,
-        "message": "Kill is currently disabled. Delete the app manually.",
-    }
-    log_message("sent", "/kill", response, status=200)
-    return jsonify(response), 200
+    # Resolve app name to ID
+    app_id, error = resolve_app_id(app_name)
+    if error:
+        logger.error(f"Failed to resolve app: {error}")
+        response = {"status": "error", "app_name": app_name, "message": error}
+        log_message("sent", "/kill", response, status=404)
+        return jsonify(response), 404
+
+    # Delete the app
+    try:
+        delete_app(app_id)
+        logger.info(f"Successfully deleted app: {app_name} (id: {app_id})")
+        response = {
+            "status": "deleted",
+            "app_name": app_name,
+            "app_id": app_id,
+        }
+        log_message("sent", "/kill", response, status=200)
+        return jsonify(response), 200
+    except Exception as e:
+        logger.error(f"Failed to delete app {app_name}: {e}")
+        response = {"status": "error", "app_name": app_name, "message": str(e)}
+        log_message("sent", "/kill", response, status=500)
+        return jsonify(response), 500
 
 
 @app.route("/init-logs", methods=["POST"])
